@@ -5,6 +5,7 @@ import { Map } from "immutable"
 import win from "../window"
 
 export default function downloadUrlPlugin (toolbox) {
+
   let { fn } = toolbox
 
   const actions = {
@@ -84,6 +85,13 @@ export default function downloadUrlPlugin (toolbox) {
         type: "spec_update_loading_status",
         payload: status
       }
+    },
+
+    setApiVersion: (api_version) => {
+      return {
+        type: "set_api_version",
+        payload: { api_version }
+      }
     }
   }
 
@@ -92,6 +100,9 @@ export default function downloadUrlPlugin (toolbox) {
       return (typeof action.payload === "string")
         ? state.set("loadingStatus", action.payload)
         : state
+    },
+    "set_api_version": (state, action) => {
+      return state.set("api_version", action.payload)
     }
   }
 

@@ -345,7 +345,6 @@ export function getParameter(state, pathMethod, name, inType) {
     return Map.isMap(p) && p.get("name") === name && p.get("in") === inType
   }) || Map() // Always return a map
 }
-
 export const hasHost = createSelector(
   spec,
   spec => {

@@ -2,7 +2,7 @@ import React, { cloneElement } from "react"
 import PropTypes from "prop-types"
 
 //import "./topbar.less"
-import Logo from "./logo_small.png"
+import Logo from "./logo.png"
 import {parseSearch, serializeSearch} from "../../core/utils"
 
 export default class Topbar extends React.Component {
@@ -33,7 +33,21 @@ export default class Topbar extends React.Component {
   onUrlSelect =(e)=> {
     let url = e.target.value || e.target.href
     this.loadSpec(url)
+
+    const urls = this.props.getConfigs().urls || []
+    if(urls && urls.length) {
+      urls.forEach((spec, i) => {
+        if(spec.url === url) {
+          if (spec.x_api_version) {
+            this.props.specActions.setApiVersion(spec.x_api_version);
+          }
+          return false;
+        }
+      })
+    }
+
     this.setSelectedUrl(url)
+
     e.preventDefault()
   }
 
@@ -123,7 +137,7 @@ export default class Topbar extends React.Component {
       })
 
       control.push(
-        <label className="select-label" htmlFor="select"><span>Select a spec</span>
+        <label style={{color:'#fafafa'}} className="select-label-versioning" htmlFor="select"><span>Select a version</span>
           <select id="select" disabled={isLoading} onChange={ this.onUrlSelect } value={urls[this.state.selectedIndex].url}>
             {rows}
           </select>
@@ -141,8 +155,7 @@ export default class Topbar extends React.Component {
         <div className="wrapper">
           <div className="topbar-wrapper">
             <Link>
-              <img height="30" width="30" src={ Logo } alt="Swagger UI"/>
-              <span>swagger</span>
+              <img height="41" width="270" src={ Logo } alt="interworks.Cloud Billing API"/>
             </Link>
             <form className="download-url-wrapper" onSubmit={formOnSubmit}>
               {control.map((el, i) => cloneElement(el, { key: i }))}
