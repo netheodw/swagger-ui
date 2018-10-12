@@ -22,6 +22,11 @@ export const url = createSelector(
   spec => spec.get("url")
 )
 
+export const apiVersion = createSelector(
+  state,
+  spec => spec.get("api_version")
+)
+
 export const specStr = createSelector(
   state,
   spec => spec.get("spec") || ""

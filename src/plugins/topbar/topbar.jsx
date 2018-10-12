@@ -75,6 +75,7 @@ export default class Topbar extends React.Component {
         urls.forEach((spec, i) => {
           if(spec.url === selectedUrl)
             {
+
               this.setState({selectedIndex: i})
               this.setSearch(spec)
             }
@@ -94,6 +95,10 @@ export default class Topbar extends React.Component {
         urls.forEach((spec, i) => {
           if(spec.name === primaryName)
             {
+              if (spec.x_api_version) {
+                this.props.specActions.setApiVersion(spec.x_api_version);
+              }
+
               this.setState({selectedIndex: i})
             }
         })

@@ -339,10 +339,9 @@ export const executeRequest = (req) =>
   ({fn, specActions, specSelectors, getConfigs, oas3Selectors}) => {
     let { pathName, method, operation } = req
     let { requestInterceptor, responseInterceptor } = getConfigs()
-
-    
+    let apiVersion = specSelectors.apiVersion() !== undefined ? specSelectors.apiVersion().api_version : ''
     let op = operation.toJS()
-    
+
     // ensure that explicitly-included params are in the request
 
     if(op && op.parameters && op.parameters.length) {
@@ -362,7 +361,6 @@ export const executeRequest = (req) =>
           }
         })
     }
-
     // if url is relative, parseUrl makes it absolute by inferring from `window.location`
     req.contextUrl = parseUrl(specSelectors.url()).toString()
 
@@ -405,6 +403,10 @@ export const executeRequest = (req) =>
 
     let requestInterceptorWrapper = function(r) {
       let mutatedRequest = requestInterceptor.apply(this, [r])
+
+      // Custom header for version of api
+      mutatedRequest.headers["X-api-version"] = apiVersion.toString()
+
       let parsedMutatedRequest = Object.assign({}, mutatedRequest)
       specActions.setMutatedRequest(req.pathName, req.method, parsedMutatedRequest)
       return mutatedRequest
@@ -416,12 +418,11 @@ export const executeRequest = (req) =>
     // track duration of request
     const startTime = Date.now()
 
-
     return fn.execute(req)
     .then( res => {
       res.duration = Date.now() - startTime
       specActions.setResponse(req.pathName, req.method, res)
-    } )
+    })
     .catch(
       err => specActions.setResponse(req.pathName, req.method, {
         error: true, err: serializeError(err)

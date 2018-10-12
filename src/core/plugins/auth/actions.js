@@ -74,7 +74,7 @@ export const authorizePassword = ( auth ) => ( { authActions } ) => {
   let { schema, name, username, password, passwordType, clientId, clientSecret } = auth
   let form = {
     grant_type: "password",
-    scope: auth.scopes.join(scopeSeparator)
+    scope: encodeURIComponent(auth.scopes.join(scopeSeparator))
   }
   let query = {}
   let headers = {}
@@ -84,17 +84,15 @@ export const authorizePassword = ( auth ) => ( { authActions } ) => {
   } else {
     Object.assign(form, {username}, {password})
 
-    switch ( passwordType ) {
-      case "query":
-        setClientIdAndSecret(query, clientId, clientSecret)
-        break
-
-      case "request-body":
-        setClientIdAndSecret(form, clientId, clientSecret)
-        break
-
-      default:
-        headers.Authorization = "Basic " + btoa(clientId + ":" + clientSecret)
+    if ( passwordType === "query") {
+      if ( clientId ) {
+        query.client_id = clientId
+      }
+      if ( clientSecret ) {
+        query.client_secret = clientSecret
+      }
+    } else {
+      headers.Authorization = "Basic " + btoa(clientId + ":" + clientSecret)
     }
   }
 
@@ -137,42 +135,18 @@ export const authorizeAccessCodeWithFormParams = ( { auth, redirectUrl } ) => ( 
   return authActions.authorizeRequest({body: buildFormData(form), name, url: schema.get("tokenUrl"), auth})
 }
 
-export const authorizeAccessCodeWithBasicAuthentication = ( { auth, redirectUrl } ) => ( { authActions } ) => {
-  let { schema, name, clientId, clientSecret } = auth
-  let headers = {
-    Authorization: "Basic " + btoa(clientId + ":" + clientSecret)
-  }
-  let form = {
-    grant_type: "authorization_code",
-    code: auth.code,
-    client_id: clientId,
-    redirect_uri: redirectUrl
-  }
-
-  return authActions.authorizeRequest({body: buildFormData(form), name, url: schema.get("tokenUrl"), auth, headers})
-}
-
-export const authorizeRequest = ( data ) => ( { fn, getConfigs, authActions, errActions, oas3Selectors, specSelectors, authSelectors } ) => {
+export const authorizeRequest = ( data ) => ( { fn, authActions, errActions, authSelectors } ) => {
   let { body, query={}, headers={}, name, url, auth } = data
-
   let { additionalQueryStringParams } = authSelectors.getConfigs() || {}
+  let fetchUrl = url
 
-  let parsedUrl
-
-  if (specSelectors.isOAS3()) {
-    parsedUrl = parseUrl(url, oas3Selectors.selectedServer(), true)
-  } else {
-    parsedUrl = parseUrl(url, specSelectors.url(), true)
+  for (let key in additionalQueryStringParams) {
+    url += "&" + key + "=" + encodeURIComponent(additionalQueryStringParams[key])
   }
-
-  if(typeof additionalQueryStringParams === "object") {
-    parsedUrl.query = Object.assign({}, parsedUrl.query, additionalQueryStringParams)
-  }
-
-  const fetchUrl = parsedUrl.toString()
 
   let _headers = Object.assign({
     "Accept":"application/json, text/plain, */*",
+    "Access-Control-Allow-Origin": "*",
     "Content-Type": "application/x-www-form-urlencoded"
   }, headers)
 
@@ -181,63 +155,61 @@ export const authorizeRequest = ( data ) => ( { fn, getConfigs, authActions, err
     method: "post",
     headers: _headers,
     query: query,
-    body: body,
-    requestInterceptor: getConfigs().requestInterceptor,
-    responseInterceptor: getConfigs().responseInterceptor
+    body: body
   })
-  .then(function (response) {
-    let token = JSON.parse(response.data)
-    let error = token && ( token.error || "" )
-    let parseError = token && ( token.parseError || "" )
+    .then(function (response) {
+      let token = JSON.parse(response.data)
+      let error = token && ( token.error || "" )
+      let parseError = token && ( token.parseError || "" )
 
-    if ( !response.ok ) {
+      if ( !response.ok ) {
+        errActions.newAuthErr( {
+          authId: name,
+          level: "error",
+          source: "auth",
+          message: response.statusText
+        } )
+        return
+      }
+
+      if ( error || parseError ) {
+        errActions.newAuthErr({
+          authId: name,
+          level: "error",
+          source: "auth",
+          message: JSON.stringify(token)
+        })
+        return
+      }
+
+      authActions.authorizeOauth2({ auth, token})
+    })
+    .catch(e => {
+      let err = new Error(e)
+      let message = err.message
+      // swagger-js wraps the response (if available) into the e.response property;
+      // investigate to check whether there are more details on why the authorization
+      // request failed (according to RFC 6479).
+      // See also https://github.com/swagger-api/swagger-ui/issues/4048
+      if (e.response && e.response.data) {
+        const errData = e.response.data
+        try {
+          const jsonResponse = typeof errData === "string" ? JSON.parse(errData) : errData
+          if (jsonResponse.error)
+            message += `, error: ${jsonResponse.error}`
+          if (jsonResponse.error_description)
+            message += `, description: ${jsonResponse.error_description}`
+        } catch (jsonError) {
+          // Ignore
+        }
+      }
       errActions.newAuthErr( {
         authId: name,
         level: "error",
         source: "auth",
-        message: response.statusText
+        message: message
       } )
-      return
-    }
-
-    if ( error || parseError ) {
-      errActions.newAuthErr({
-        authId: name,
-        level: "error",
-        source: "auth",
-        message: JSON.stringify(token)
-      })
-      return
-    }
-
-    authActions.authorizeOauth2({ auth, token})
-  })
-  .catch(e => {
-    let err = new Error(e)
-    let message = err.message
-    // swagger-js wraps the response (if available) into the e.response property;
-    // investigate to check whether there are more details on why the authorization
-    // request failed (according to RFC 6479).
-    // See also https://github.com/swagger-api/swagger-ui/issues/4048
-    if (e.response && e.response.data) {
-      const errData = e.response.data
-      try {
-        const jsonResponse = typeof errData === "string" ? JSON.parse(errData) : errData
-        if (jsonResponse.error)
-          message += `, error: ${jsonResponse.error}`
-        if (jsonResponse.error_description)
-          message += `, description: ${jsonResponse.error_description}`
-      } catch (jsonError) {
-        // Ignore
-      }
-    }
-    errActions.newAuthErr( {
-      authId: name,
-      level: "error",
-      source: "auth",
-      message: message
-    } )
-  })
+    })
 }
 
 export function configureAuth(payload) {
